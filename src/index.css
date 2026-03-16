@@ -1,1 +1,43 @@
 @import "tailwindcss";
+
+/* ── Wzór fal oceanicznych – granatowe falowanie ── */
+.cell-ocean {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%230a1e4a'/%3E%3Cpath d='M0,13 Q5,8 10,13 Q15,18 20,13 Q25,8 30,13 Q35,18 40,13 L40,21 Q35,26 30,21 Q25,16 20,21 Q15,26 10,21 Q5,16 0,21Z' fill='%231a3a6b'/%3E%3Cpath d='M0,27 Q5,22 10,27 Q15,32 20,27 Q25,22 30,27 Q35,32 40,27 L40,40 L0,40Z' fill='%231e4a8a'/%3E%3Cpath d='M2,13 Q7,10 12,13' stroke='%235a82c8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3Cpath d='M22,27 Q27,24 32,27' stroke='%235a82c8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-size: cover;
+}
+.cell-ocean:hover { filter: brightness(1.35); }
+
+/* ── Kadłub okrętu – poziome blachy poszycia (statek poziomy) ── */
+.cell-camo {
+  background-color: #6b7f8f;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%236b7f8f'/%3E%3Crect y='0'  width='40' height='13' fill='%237e95a6'/%3E%3Crect y='14' width='40' height='12' fill='%235a6e7d'/%3E%3Crect y='27' width='40' height='13' fill='%236b7f8f'/%3E%3Crect y='13' width='40' height='1' fill='%2334495a'/%3E%3Crect y='26' width='40' height='1' fill='%2334495a'/%3E%3Crect y='39' width='40' height='1' fill='%2334495a'/%3E%3Crect y='0'  width='40' height='2' fill='%23adc4d4' opacity='0.5'/%3E%3Crect y='14' width='40' height='2' fill='%23adc4d4' opacity='0.3'/%3E%3Crect y='27' width='40' height='2' fill='%23adc4d4' opacity='0.3'/%3E%3C/svg%3E");
+  background-size: cover;
+}
+.cell-camo:hover { filter: brightness(1.2); }
+
+/* ── Kadłub okrętu – pionowe blachy poszycia (statek pionowy) ── */
+.cell-camo-v {
+  background-color: #6b7f8f;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%236b7f8f'/%3E%3Crect x='0'  width='13' height='40' fill='%237e95a6'/%3E%3Crect x='14' width='12' height='40' fill='%235a6e7d'/%3E%3Crect x='27' width='13' height='40' fill='%236b7f8f'/%3E%3Crect x='13' width='1' height='40' fill='%2334495a'/%3E%3Crect x='26' width='1' height='40' fill='%2334495a'/%3E%3Crect x='39' width='1' height='40' fill='%2334495a'/%3E%3Crect x='0'  width='2' height='40' fill='%23adc4d4' opacity='0.5'/%3E%3Crect x='14' width='2' height='40' fill='%23adc4d4' opacity='0.3'/%3E%3Crect x='27' width='2' height='40' fill='%23adc4d4' opacity='0.3'/%3E%3C/svg%3E");
+  background-size: cover;
+}
+.cell-camo-v:hover { filter: brightness(1.2); }
+
+/* ── Bardzo jasna żółta ryba ── */
+.fish-yellow {
+  filter: sepia(1) hue-rotate(10deg) saturate(3) brightness(2.2);
+}
+
+/* ── Animacja wybuchu ── */
+@keyframes explode {
+  0%   { transform: scale(0.1) rotate(-30deg); opacity: 0; }
+  25%  { transform: scale(2.8) rotate(15deg);  opacity: 1; }
+  55%  { transform: scale(1.9) rotate(-8deg);  opacity: 1; }
+  75%  { transform: scale(2.3) rotate(6deg);   opacity: 1; }
+  100% { transform: scale(1)   rotate(0deg);   opacity: 1; }
+}
+
+.cell-exploding {
+  display: inline-block;
+  animation: explode 0.65s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
+}
