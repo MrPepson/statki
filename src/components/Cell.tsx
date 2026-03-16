@@ -3,8 +3,11 @@ import type { CellState } from '../store/boardTypes';
 interface CellProps {
   state: CellState;
   onClick: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
   isExploding?: boolean;
   shipOrientation?: 'h' | 'v';
+  previewState?: 'valid' | 'invalid';
 }
 
 function getBg(state: CellState, shipOrientation?: 'h' | 'v'): string {
@@ -16,7 +19,6 @@ function getBg(state: CellState, shipOrientation?: 'h' | 'v'): string {
   }
 }
 
-// Symbol wyświetlany na polu
 const SYMBOL: Record<CellState, string> = {
   empty: '🐟',
   ship:  '',
@@ -24,7 +26,6 @@ const SYMBOL: Record<CellState, string> = {
   miss:  '✕',
 };
 
-// Rozmiar symbolu
 const SYMBOL_CLASS: Record<CellState, string> = {
   empty: 'text-base opacity-40 fish-yellow',
   ship:  '',
@@ -32,11 +33,14 @@ const SYMBOL_CLASS: Record<CellState, string> = {
   miss:  'text-base font-bold',
 };
 
-export default function Cell({ state, onClick, isExploding, shipOrientation }: CellProps) {
+export default function Cell({ state, onClick, onMouseEnter, onMouseLeave, isExploding, shipOrientation, previewState }: CellProps) {
   return (
     <button
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className={`
+        relative
         w-[54px] h-[54px] sm:w-[60px] sm:h-[60px]
         border border-blue-950
         flex items-center justify-center
@@ -49,6 +53,11 @@ export default function Cell({ state, onClick, isExploding, shipOrientation }: C
       <span className={`${SYMBOL_CLASS[state]} ${state === 'hit' && isExploding ? 'cell-exploding' : ''}`}>
         {SYMBOL[state]}
       </span>
+      {previewState && (
+        <div className={`absolute inset-0 pointer-events-none ${
+          previewState === 'valid' ? 'bg-green-400/50' : 'bg-red-500/50'
+        }`} />
+      )}
     </button>
   );
 }

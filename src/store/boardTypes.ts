@@ -6,3 +6,11 @@ export interface CellCoord {
   row: number;
   col: number;
 }
+
+// Definicja typu statku
+export interface ShipDef {
+  id: string;
+  name: string;
+  size: number;
+  count: number;
+}
