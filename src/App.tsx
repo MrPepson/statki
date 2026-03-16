@@ -25,7 +25,7 @@ export default function App() {
       )}
 
       {screen === 'game' && (
-        <Board />
+        <Board gameId={_gameId ?? undefined} />
       )}
     </div>
   );

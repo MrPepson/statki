@@ -10,9 +10,10 @@ interface Props {
   onReset: () => void;
   onRandom: () => void;
   onReady: () => void;
+  readyError?: string;
 }
 
-export default function ShipPanel({ fleet, remaining, selectedId, orientation, onSelect, onRotate, onReset, onRandom, onReady }: Props) {
+export default function ShipPanel({ fleet, remaining, selectedId, orientation, onSelect, onRotate, onReset, onRandom, onReady, readyError }: Props) {
   const allPlaced = fleet.every(s => remaining[s.id] === 0);
 
   return (
@@ -113,6 +114,10 @@ export default function ShipPanel({ fleet, remaining, selectedId, orientation, o
       >
         {allPlaced ? '✓ GOTOWY' : 'GOTOWY'}
       </button>
+
+      {readyError && (
+        <p className="text-red-400 text-xs text-center">{readyError}</p>
+      )}
 
       <p className="text-slate-500 text-xs text-center">
         PPM na planszy = obrót

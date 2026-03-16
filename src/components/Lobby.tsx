@@ -1,11 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
-// Klucz sessionStorage do zapamiętania pseudonimu
 const NICKNAME_KEY = 'statki_nickname';
-
-// Alfabet kodu pokoju – bez mylących znaków (0/O, 1/I)
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const CODE_CHARS    = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 function generateRoomCode(): string {
   return Array.from(
@@ -14,7 +11,6 @@ function generateRoomCode(): string {
   ).join('');
 }
 
-// Loguje anonimowo lub zwraca istniejącą sesję
 async function getOrSignIn(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
   if (user) return user.id;
@@ -32,25 +28,53 @@ export default function Lobby({ onEnterGame }: Props) {
   const [nickname, setNickname] = useState(
     () => sessionStorage.getItem(NICKNAME_KEY) ?? ''
   );
-  const [joinCode, setJoinCode]     = useState('');
+  const [joinCode, setJoinCode]       = useState('');
   const [createdCode, setCreatedCode] = useState<string | null>(null);
-  const [createdGameId, setCreatedGameId] = useState<string | null>(null);
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState<string | null>(null);
+  const [waiting, setWaiting]         = useState(false); // player1 czeka na gracza 2
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState<string | null>(null);
+
+  // Referencja do kanału Realtime – potrzebna do cleanup
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Posprzątaj kanał przy odmontowaniu komponentu
+  useEffect(() => {
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+  }, []);
 
   function handleNicknameChange(value: string) {
     setNickname(value);
     sessionStorage.setItem(NICKNAME_KEY, value);
   }
 
+  // Subskrybuj zmiany statusu gry – player1 czeka na player2
+  function subscribeToGame(gameId: string) {
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
+
+    channelRef.current = supabase
+      .channel(`lobby:${gameId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` },
+        (payload) => {
+          const status = (payload.new as { status: string }).status;
+          // Gdy player2 dołączył (placing) lub obaj gotowi (playing) – przejdź do planszy
+          if (status === 'placing' || status === 'playing') {
+            onEnterGame(gameId);
+          }
+        }
+      )
+      .subscribe();
+  }
+
   async function handleCreate() {
     if (!nickname.trim()) { setError('Podaj pseudonim przed stworzeniem gry.'); return; }
-    setLoading(true); setError(null); setCreatedCode(null);
+    setLoading(true); setError(null); setCreatedCode(null); setWaiting(false);
     try {
       const userId = await getOrSignIn();
-      // Próbuj do 5 razy w razie kolizji kodu
-      let gameId = '';
-      let roomCode = '';
+      let gameId = '', roomCode = '';
       for (let i = 0; i < 5; i++) {
         roomCode = generateRoomCode();
         const { data, error: insertError } = await supabase
@@ -63,7 +87,8 @@ export default function Lobby({ onEnterGame }: Props) {
       }
       if (!gameId) throw new Error('Nie udało się wygenerować unikalnego kodu.');
       setCreatedCode(roomCode);
-      setCreatedGameId(gameId);
+      setWaiting(true);
+      subscribeToGame(gameId); // auto-przekierowanie gdy player2 dołączy
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Nieznany błąd');
     } finally {
@@ -79,7 +104,6 @@ export default function Lobby({ onEnterGame }: Props) {
       const userId = await getOrSignIn();
       const code = joinCode.trim().toUpperCase();
 
-      // Znajdź otwartą grę o podanym kodzie
       const { data: game, error: findError } = await supabase
         .from('games')
         .select('id, player1_id')
@@ -91,14 +115,13 @@ export default function Lobby({ onEnterGame }: Props) {
       if (findError || !game) throw new Error('Nie znaleziono gry. Sprawdź kod pokoju.');
       if (game.player1_id === userId) throw new Error('To twoja własna gra – poczekaj na drugiego gracza.');
 
-      // Dołącz jako gracz 2 i przestaw grę do fazy układania
       const { error: joinError } = await supabase
         .from('games')
         .update({ player2_id: userId, status: 'placing' })
         .eq('id', game.id);
 
       if (joinError) throw joinError;
-      onEnterGame(game.id);
+      onEnterGame(game.id); // player2 przechodzi od razu
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Nieznany błąd');
     } finally {
@@ -106,14 +129,10 @@ export default function Lobby({ onEnterGame }: Props) {
     }
   }
 
-  async function handleCopyCode() {
-    if (createdCode) await navigator.clipboard.writeText(createdCode);
-  }
-
   return (
     <div className="w-full max-w-lg flex flex-col gap-6">
 
-      {/* Pole pseudonimu */}
+      {/* Pseudonim */}
       <div className="flex flex-col gap-2">
         <label className="text-slate-300 text-sm font-semibold tracking-wide uppercase">
           Pseudonim
@@ -137,17 +156,16 @@ export default function Lobby({ onEnterGame }: Props) {
           <h2 className="text-white font-bold text-base">Stwórz grę</h2>
           <button
             onClick={handleCreate}
-            disabled={loading}
+            disabled={loading || waiting}
             className="w-full py-3 rounded-lg bg-teal-700 hover:bg-teal-600 disabled:opacity-50
-                       disabled:cursor-not-allowed text-white font-bold tracking-wide
-                       transition-colors"
+                       disabled:cursor-not-allowed text-white font-bold tracking-wide transition-colors"
           >
             {loading ? '…' : '+ STWÓRZ GRĘ'}
           </button>
 
-          {/* Kod pokoju po utworzeniu */}
+          {/* Kod pokoju + oczekiwanie */}
           {createdCode && (
-            <div className="flex flex-col gap-3 mt-1">
+            <div className="flex flex-col gap-3">
               <p className="text-slate-400 text-xs">Podaj ten kod graczowi 2:</p>
               <div className="flex items-center gap-2">
                 <span className="flex-1 text-center text-3xl font-mono font-bold tracking-widest
@@ -155,21 +173,19 @@ export default function Lobby({ onEnterGame }: Props) {
                   {createdCode}
                 </span>
                 <button
-                  onClick={handleCopyCode}
+                  onClick={() => navigator.clipboard.writeText(createdCode)}
                   title="Skopiuj kod"
                   className="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600
-                             text-slate-300 text-sm transition-colors"
+                             text-slate-300 transition-colors"
                 >
                   📋
                 </button>
               </div>
-              <button
-                onClick={() => createdGameId && onEnterGame(createdGameId)}
-                className="w-full py-2 rounded-lg bg-green-700 hover:bg-green-600
-                           text-white font-bold text-sm tracking-wide transition-colors"
-              >
-                Przejdź do planszy →
-              </button>
+              {waiting && (
+                <p className="text-teal-400 text-sm text-center animate-pulse">
+                  ⏳ Czekam na gracza 2…
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -193,8 +209,7 @@ export default function Lobby({ onEnterGame }: Props) {
             onClick={handleJoin}
             disabled={loading}
             className="w-full py-3 rounded-lg bg-blue-700 hover:bg-blue-600 disabled:opacity-50
-                       disabled:cursor-not-allowed text-white font-bold tracking-wide
-                       transition-colors"
+                       disabled:cursor-not-allowed text-white font-bold tracking-wide transition-colors"
           >
             {loading ? '…' : 'DOŁĄCZ DO GRY'}
           </button>
@@ -202,14 +217,12 @@ export default function Lobby({ onEnterGame }: Props) {
 
       </div>
 
-      {/* Komunikat błędu */}
       {error && (
         <p className="text-red-400 text-sm text-center bg-red-950/40 border border-red-800
                       rounded-lg px-4 py-2">
           {error}
         </p>
       )}
-
     </div>
   );
 }
