@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, getPlayerId } from '../lib/supabase';
 
 const NICKNAME_KEY = 'statki_nickname';
 const CODE_CHARS    = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -9,15 +9,6 @@ function generateRoomCode(): string {
     { length: 6 },
     () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]
   ).join('');
-}
-
-async function getOrSignIn(): Promise<string> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user) return user.id;
-  const { data, error } = await supabase.auth.signInAnonymously();
-  if (error) throw new Error(`Błąd logowania: ${error.message}`);
-  if (!data.user) throw new Error('Nie udało się zalogować anonimowo.');
-  return data.user.id;
 }
 
 interface Props {
@@ -73,7 +64,7 @@ export default function Lobby({ onEnterGame }: Props) {
     if (!nickname.trim()) { setError('Podaj pseudonim przed stworzeniem gry.'); return; }
     setLoading(true); setError(null); setCreatedCode(null); setWaiting(false);
     try {
-      const userId = await getOrSignIn();
+      const userId = getPlayerId();
       let gameId = '', roomCode = '';
       for (let i = 0; i < 5; i++) {
         roomCode = generateRoomCode();
@@ -101,7 +92,7 @@ export default function Lobby({ onEnterGame }: Props) {
     if (!joinCode.trim()) { setError('Podaj kod pokoju.'); return; }
     setLoading(true); setError(null);
     try {
-      const userId = await getOrSignIn();
+      const userId = getPlayerId();
       const code = joinCode.trim().toUpperCase();
 
       const { data: game, error: findError } = await supabase

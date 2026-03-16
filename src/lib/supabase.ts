@@ -10,14 +10,26 @@ if (!supabaseUrl || !supabaseAnon) {
 // Singleton klienta Supabase – jeden egzemplarz na całą aplikację
 export const supabase = createClient(supabaseUrl, supabaseAnon, {
   auth: {
-    autoRefreshToken:   true,
-    persistSession:     true,
-    detectSessionInUrl: true,
+    autoRefreshToken:   false,
+    persistSession:     false,
+    detectSessionInUrl: false,
   },
   realtime: {
     timeout: 20_000,
   },
 });
+
+// ── Identyfikator gracza (UUID z localStorage, bez Supabase Auth) ──
+const PLAYER_ID_KEY = 'statki_player_id';
+
+export function getPlayerId(): string {
+  let id = localStorage.getItem(PLAYER_ID_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(PLAYER_ID_KEY, id);
+  }
+  return id;
+}
 
 // ── Typy pomocnicze ──────────────────────────────────────────
 
