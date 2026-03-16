@@ -17,6 +17,7 @@ function getBg(state: CellState, shipOrientation?: 'h' | 'v'): string {
     case 'ship':  return shipOrientation === 'v' ? 'cell-camo-v' : 'cell-camo';
     case 'hit':   return 'bg-red-600 hover:bg-red-500';
     case 'miss':  return 'bg-white hover:bg-gray-100';
+    case 'sunk':  return 'bg-red-950';
   }
 }
 
@@ -25,6 +26,7 @@ const SYMBOL: Record<CellState, string> = {
   ship:  '',
   hit:   '💥',
   miss:  '✕',
+  sunk:  '💀',
 };
 
 const SYMBOL_CLASS: Record<CellState, string> = {
@@ -32,6 +34,7 @@ const SYMBOL_CLASS: Record<CellState, string> = {
   ship:  '',
   hit:   'text-4xl',
   miss:  'text-base font-bold',
+  sunk:  'text-2xl',
 };
 
 export default function Cell({ state, onClick, onMouseEnter, onMouseLeave, isExploding, shipOrientation, previewState, shootable }: CellProps) {

@@ -72,9 +72,47 @@ function findShipDefId(ships: ShipPlacement[], row: number, col: number): ShipPl
   return ship?.ship_def_id ?? null;
 }
 
-interface Props { gameId?: string; }
+// Sprawdza czy statek trafiony w (hitRow, hitCol) jest zatopiony.
+// Mutuje grid (podaj kopię!): pola statku → 'sunk', pola otaczające → 'miss'.
+// Zwraca nazwę zatopionego statku lub null.
+function applySinking(
+  grid: CellState[][],
+  ships: ShipPlacement[],
+  hitRow: number,
+  hitCol: number,
+): string | null {
+  const ship = ships.find(s => s.cells.some(([r, c]) => r === hitRow && c === hitCol));
+  if (!ship) return null;
 
-export default function Board({ gameId }: Props) {
+  const allHit = ship.cells.every(([r, c]) =>
+    grid[r][c] === 'hit' || grid[r][c] === 'sunk'
+  );
+  if (!allHit) return null;
+
+  const shipSet = new Set(ship.cells.map(([r, c]) => `${r}-${c}`));
+  ship.cells.forEach(([r, c]) => { grid[r][c] = 'sunk'; });
+
+  for (const [sr, sc] of ship.cells) {
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const nr = sr + dr, nc = sc + dc;
+        if (nr >= 0 && nr < 10 && nc >= 0 && nc < 10 && !shipSet.has(`${nr}-${nc}`) && grid[nr][nc] === 'empty') {
+          grid[nr][nc] = 'miss';
+        }
+      }
+    }
+  }
+
+  return FLEET.find(f => f.id === ship.ship_def_id)?.name ?? 'Statek';
+}
+
+function allShipsSunk(grid: CellState[][], ships: ShipPlacement[]): boolean {
+  return ships.every(ship => ship.cells.every(([r, c]) => grid[r][c] === 'sunk'));
+}
+
+interface Props { gameId?: string; onBackToLobby?: () => void; }
+
+export default function Board({ gameId, onBackToLobby }: Props) {
   const myId = getPlayerId();
 
   // ── Faza rozmieszczania ──
@@ -96,16 +134,35 @@ export default function Board({ gameId }: Props) {
   const [explodingCells, setExplodingCells] = useState<Set<string>>(new Set()); // siatka wroga
   const [myExplodingCells, setMyExplodingCells] = useState<Set<string>>(new Set()); // własna siatka
 
+  // Powiadomienie o zatopieniu
+  const [sunkNote, setSunkNote] = useState<{ who: 'enemy' | 'mine'; name: string } | null>(null);
+
+  // Wynik gry + statystyki
+  const [gameResult, setGameResult] = useState<'win' | 'lose' | null>(null);
+  const [myShotCount, setMyShotCount] = useState(0);
+  const [gameDurationSec, setGameDurationSec] = useState(0);
+  const gameStartTimeRef = useRef<number | null>(null);
+
   // Refy dla callbacków Realtime (unikamy stale closure)
   const phaseRef        = useRef<BoardPhase>('placing');
   const opponentIdRef   = useRef<string | null>(null);
   const enemyShipsRef   = useRef<ShipPlacement[]>([]);
+  const myGridRef       = useRef<CellState[][]>(initGrid());
+  const placedShipsRef  = useRef<ShipPlacement[]>([]);
   const channelRef      = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const shotsChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { myGridRef.current = myGrid; }, [myGrid]);
+  useEffect(() => { placedShipsRef.current = placedShips; }, [placedShips]);
 
   const isMyTurn = currentTurn === myId;
+
+  function finishGame(result: 'win' | 'lose') {
+    const elapsed = gameStartTimeRef.current ? Math.round((Date.now() - gameStartTimeRef.current) / 1000) : 0;
+    setGameDurationSec(elapsed);
+    setGameResult(result);
+  }
 
   // ── Realtime: nasłuchuj zmian gry i strzałów ──
   useEffect(() => {
@@ -122,7 +179,13 @@ export default function Board({ gameId }: Props) {
             player1_id: string;
             player2_id: string | null;
             current_turn: string | null;
+            winner_id: string | null;
           };
+
+          if (g.status === 'finished') {
+            finishGame(g.winner_id === myId ? 'win' : 'lose');
+            return;
+          }
 
           if (g.status === 'playing') {
             setCurrentTurn(g.current_turn);
@@ -158,13 +221,28 @@ export default function Board({ gameId }: Props) {
                     // Strzał przeciwnika w moją planszę
                     if (shot.shooter_id !== myId) {
                       const st: CellState = shot.result === 'hit' ? 'hit' : 'miss';
-                      setMyGrid(prev => {
-                        const next = prev.map(r => [...r]);
-                        next[shot.target_row][shot.target_col] = st;
-                        return next;
-                      });
-                      const key = `${shot.target_row}-${shot.target_col}`;
+                      const newGrid = myGridRef.current.map(r => [...r]);
+                      newGrid[shot.target_row][shot.target_col] = st;
+
+                      let sunkName: string | null = null;
                       if (st === 'hit') {
+                        sunkName = applySinking(newGrid, placedShipsRef.current, shot.target_row, shot.target_col);
+                      }
+
+                      setMyGrid(newGrid);
+                      myGridRef.current = newGrid;
+
+                      // Sprawdź czy wszystkie moje statki są zatopione → przegrałem
+                      if (allShipsSunk(newGrid, placedShipsRef.current)) {
+                        finishGame('lose');
+                        return;
+                      }
+
+                      const key = `${shot.target_row}-${shot.target_col}`;
+                      if (sunkName) {
+                        setSunkNote({ who: 'mine', name: sunkName });
+                        setTimeout(() => setSunkNote(null), 3000);
+                      } else if (st === 'hit') {
                         setMyExplodingCells(prev => new Set(prev).add(key));
                         setTimeout(() => setMyExplodingCells(prev => { const n = new Set(prev); n.delete(key); return n; }), 700);
                       } else {
@@ -175,6 +253,7 @@ export default function Board({ gameId }: Props) {
                 )
                 .subscribe();
 
+              gameStartTimeRef.current = Date.now();
               setPhase('playing');
             }
           }
@@ -296,21 +375,29 @@ export default function Board({ gameId }: Props) {
     );
     const result: 'hit' | 'miss' = isHit ? 'hit' : 'miss';
 
-    // Aktualizacja lokalna
-    setEnemyGrid(prev => {
-      const next = prev.map(r => [...r]);
-      next[row][col] = result;
-      return next;
-    });
-    const key = `${row}-${col}`;
+    // Aktualizacja lokalna + wykrycie zatopienia
+    const newEnemyGrid = enemyGrid.map(r => [...r]);
+    newEnemyGrid[row][col] = result;
+
+    let sunkName: string | null = null;
     if (result === 'hit') {
+      sunkName = applySinking(newEnemyGrid, enemyShipsRef.current, row, col);
+    }
+
+    setEnemyGrid(newEnemyGrid);
+
+    const key = `${row}-${col}`;
+    if (sunkName) {
+      setSunkNote({ who: 'enemy', name: sunkName });
+      setTimeout(() => setSunkNote(null), 3000);
+    } else if (result === 'hit') {
       setExplodingCells(prev => new Set(prev).add(key));
       setTimeout(() => setExplodingCells(prev => { const n = new Set(prev); n.delete(key); return n; }), 700);
     } else {
       playSplash();
     }
 
-    // Zapis do bazy
+    // Zapis strzału do bazy
     await supabase.from('shots').insert({
       game_id: gameId,
       shooter_id: myId,
@@ -319,6 +406,17 @@ export default function Board({ gameId }: Props) {
       result,
       ship_def_id: isHit ? findShipDefId(enemyShipsRef.current, row, col) : null,
     });
+
+    setMyShotCount(c => c + 1);
+
+    // Sprawdź koniec gry
+    if (allShipsSunk(newEnemyGrid, enemyShipsRef.current)) {
+      await supabase.from('games')
+        .update({ status: 'finished', winner_id: myId })
+        .eq('id', gameId);
+      finishGame('win');
+      return;
+    }
 
     // Zmień turę
     if (opponentIdRef.current) {
@@ -411,6 +509,77 @@ export default function Board({ gameId }: Props) {
     );
   }
 
+  // ── Ekran końca gry ──
+  if (gameResult) {
+    const win = gameResult === 'win';
+    const mins = Math.floor(gameDurationSec / 60);
+    const secs = gameDurationSec % 60;
+    const durationStr = mins > 0
+      ? `${mins} min ${secs} sek`
+      : `${secs} sek`;
+
+    return (
+      <div className="flex flex-col items-center gap-8 text-center">
+
+        {/* Nagłówek wyniku */}
+        <div className={`
+          flex flex-col items-center gap-3 px-16 py-8 rounded-2xl border-2
+          ${win
+            ? 'bg-yellow-950/40 border-yellow-500'
+            : 'bg-red-950/40 border-red-700'}
+        `}>
+          <span className="text-8xl">{win ? '🏆' : '💀'}</span>
+          <h2 className={`text-5xl font-extrabold tracking-widest uppercase ${win ? 'text-yellow-300' : 'text-red-400'}`}>
+            {win ? 'Wygrałeś!' : 'Przegrałeś!'}
+          </h2>
+          <p className="text-slate-400 text-base">
+            {win
+              ? 'Cała flota przeciwnika została zatopiona.'
+              : 'Twoja flota została całkowicie zatopiona.'}
+          </p>
+        </div>
+
+        {/* Statystyki */}
+        <div className="flex gap-6">
+          <div className="flex flex-col items-center gap-1 px-8 py-4 rounded-xl bg-slate-800 border border-slate-600">
+            <span className="text-3xl">⏱️</span>
+            <span className="text-2xl font-bold text-white">{durationStr}</span>
+            <span className="text-slate-400 text-xs uppercase tracking-wide">Czas gry</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 px-8 py-4 rounded-xl bg-slate-800 border border-slate-600">
+            <span className="text-3xl">🎯</span>
+            <span className="text-2xl font-bold text-white">{myShotCount}</span>
+            <span className="text-slate-400 text-xs uppercase tracking-wide">Twoje strzały</span>
+          </div>
+        </div>
+
+        {/* Obie plansze poglądowo */}
+        <div className="flex gap-8 items-start">
+          <div className="flex flex-col gap-2">
+            <p className="text-slate-400 text-xs text-center font-semibold tracking-wide">TWOJA PLANSZA</p>
+            {renderGrid(myGrid, new Set(), cellOrientations)}
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="text-slate-400 text-xs text-center font-semibold tracking-wide">PLANSZA PRZECIWNIKA</p>
+            {renderGrid(enemyGrid, new Set(), {})}
+          </div>
+        </div>
+
+        {/* Przycisk */}
+        {onBackToLobby && (
+          <button
+            onClick={onBackToLobby}
+            className="px-10 py-4 rounded-xl bg-teal-700 hover:bg-teal-600 border border-teal-500
+                       text-white font-bold text-xl tracking-wide transition-colors"
+          >
+            NOWA GRA
+          </button>
+        )}
+
+      </div>
+    );
+  }
+
   // ── Widok gry (playing) ──
   return (
     <div className="flex flex-col items-center gap-4 w-full">
@@ -425,6 +594,21 @@ export default function Board({ gameId }: Props) {
       `}>
         {isMyTurn ? '⚔️ Twoja tura — kliknij na planszę przeciwnika' : '⏳ Tura przeciwnika — poczekaj…'}
       </div>
+
+      {/* Powiadomienie o zatopieniu */}
+      {sunkNote && (
+        <div className={`
+          px-6 py-2 rounded-xl border font-bold text-base tracking-wide
+          animate-pulse
+          ${sunkNote.who === 'enemy'
+            ? 'bg-green-900/80 border-green-400 text-green-200'
+            : 'bg-red-950/80 border-red-500 text-red-300'}
+        `}>
+          {sunkNote.who === 'enemy'
+            ? `💀 Zatopiony! ${sunkNote.name}`
+            : `💥 Twój ${sunkNote.name} zatopiony!`}
+        </div>
+      )}
 
       {/* Dwie plansze */}
       <div className="flex gap-8 items-start">

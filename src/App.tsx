@@ -25,7 +25,7 @@ export default function App() {
       )}
 
       {screen === 'game' && (
-        <Board gameId={_gameId ?? undefined} />
+        <Board gameId={_gameId ?? undefined} onBackToLobby={() => setScreen('lobby')} />
       )}
     </div>
   );
