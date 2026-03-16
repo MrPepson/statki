@@ -336,11 +336,11 @@ export default function Board({ gameId }: Props) {
     onCellClick?: (r: number, c: number) => void,
     onCellHover?: (r: number, c: number) => void,
     preview?: Map<string, 'valid' | 'invalid'>,
-    crosshair = false,
+    isShootable = false,
   ) {
     return (
       <div
-        className={`flex flex-col ${crosshair ? 'cursor-crosshair' : ''}`}
+        className="flex flex-col"
         onContextMenu={e => {
           e.preventDefault();
           if (phase === 'placing') setOrientation(o => o === 'h' ? 'v' : 'h');
@@ -365,6 +365,7 @@ export default function Board({ gameId }: Props) {
                 isExploding={exploding.has(`${r}-${c}`)}
                 shipOrientation={orientations[`${r}-${c}`]}
                 previewState={preview?.get(`${r}-${c}`)}
+                shootable={isShootable && grid[r][c] === 'empty'}
               />
             ))}
           </div>
@@ -373,74 +374,92 @@ export default function Board({ gameId }: Props) {
     );
   }
 
-  return (
-    <div className="flex gap-8 items-start">
-
-      {/* Panel boczny – tylko w fazie placing */}
-      {phase === 'placing' && (
-        <ShipPanel
-          fleet={FLEET}
-          remaining={remaining}
-          selectedId={selectedShipId}
-          orientation={orientation}
-          onSelect={handleSelectShip}
-          onRotate={() => setOrientation(o => o === 'h' ? 'v' : 'h')}
-          onReset={handleReset}
-          onRandom={handleRandom}
-          onReady={handleReady}
-          readyError={readyError ?? undefined}
-        />
-      )}
-
-      <div className="flex flex-col gap-2">
-
-        {/* Status */}
-        {phase === 'waiting' && (
-          <p className="text-teal-400 text-sm text-center font-semibold animate-pulse">
-            ⏳ Czekam aż przeciwnik rozstawi flotę…
-          </p>
+  // ── Widok rozmieszczania ──
+  if (phase === 'placing' || phase === 'waiting') {
+    return (
+      <div className="flex gap-8 items-start">
+        {phase === 'placing' && (
+          <ShipPanel
+            fleet={FLEET}
+            remaining={remaining}
+            selectedId={selectedShipId}
+            orientation={orientation}
+            onSelect={handleSelectShip}
+            onRotate={() => setOrientation(o => o === 'h' ? 'v' : 'h')}
+            onReset={handleReset}
+            onRandom={handleRandom}
+            onReady={handleReady}
+            readyError={readyError ?? undefined}
+          />
         )}
-        {phase === 'playing' && (
-          <p className={`text-sm text-center font-semibold ${isMyTurn ? 'text-green-400' : 'text-slate-400 animate-pulse'}`}>
-            {isMyTurn ? '⚔️ Twoja tura – strzelaj!' : '⏳ Tura przeciwnika…'}
-          </p>
-        )}
-
-        <div className="flex gap-6 items-start">
-
-          {/* Własna plansza */}
-          <div className="flex flex-col gap-1">
-            {phase === 'playing' && (
-              <p className="text-slate-400 text-xs text-center font-semibold">Twoja plansza</p>
-            )}
-            {renderGrid(
-              myGrid,
-              myExplodingCells,
-              cellOrientations,
-              phase === 'placing' ? handlePlaceShip : undefined,
-              phase === 'placing' ? (r, c) => setHoveredCell({ row: r, col: c }) : undefined,
-              phase === 'placing' ? previewCells : undefined,
-              phase === 'placing' && !!selectedShipId,
-            )}
-          </div>
-
-          {/* Plansza przeciwnika – tylko w fazie playing */}
-          {phase === 'playing' && (
-            <div className="flex flex-col gap-1">
-              <p className="text-slate-400 text-xs text-center font-semibold">Plansza przeciwnika</p>
-              {renderGrid(
-                enemyGrid,
-                explodingCells,
-                {},
-                handleShoot,
-                undefined,
-                undefined,
-                isMyTurn,
-              )}
-            </div>
+        <div className="flex flex-col gap-2">
+          {phase === 'waiting' && (
+            <p className="text-teal-400 text-sm text-center font-semibold animate-pulse">
+              ⏳ Czekam aż przeciwnik rozstawi flotę…
+            </p>
           )}
-
+          {renderGrid(
+            myGrid,
+            myExplodingCells,
+            cellOrientations,
+            phase === 'placing' ? handlePlaceShip : undefined,
+            phase === 'placing' ? (r, c) => setHoveredCell({ row: r, col: c }) : undefined,
+            phase === 'placing' ? previewCells : undefined,
+          )}
         </div>
+      </div>
+    );
+  }
+
+  // ── Widok gry (playing) ──
+  return (
+    <div className="flex flex-col items-center gap-4 w-full">
+
+      {/* Baner tury */}
+      <div className={`
+        w-full max-w-fit px-8 py-3 rounded-xl border text-center font-bold text-lg tracking-wide
+        transition-colors duration-300
+        ${isMyTurn
+          ? 'bg-green-900/60 border-green-500 text-green-300'
+          : 'bg-slate-800/60 border-slate-600 text-slate-400 animate-pulse'}
+      `}>
+        {isMyTurn ? '⚔️ Twoja tura — kliknij na planszę przeciwnika' : '⏳ Tura przeciwnika — poczekaj…'}
+      </div>
+
+      {/* Dwie plansze */}
+      <div className="flex gap-8 items-start">
+
+        {/* Własna plansza */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-slate-800 border border-slate-600">
+            <span className="text-blue-400 text-base">🛡️</span>
+            <span className="text-slate-200 text-sm font-bold tracking-wide">TWOJA PLANSZA</span>
+          </div>
+          {renderGrid(myGrid, myExplodingCells, cellOrientations)}
+        </div>
+
+        {/* Separator */}
+        <div className="self-stretch flex items-center">
+          <div className="h-full w-px bg-slate-700" />
+        </div>
+
+        {/* Plansza przeciwnika */}
+        <div className="flex flex-col gap-2">
+          <div className={`
+            flex items-center justify-center gap-2 py-2 px-4 rounded-lg border
+            transition-colors duration-300
+            ${isMyTurn
+              ? 'bg-green-900/40 border-green-600'
+              : 'bg-slate-800 border-slate-600'}
+          `}>
+            <span className="text-base">🎯</span>
+            <span className={`text-sm font-bold tracking-wide ${isMyTurn ? 'text-green-300' : 'text-slate-400'}`}>
+              PLANSZA PRZECIWNIKA
+            </span>
+          </div>
+          {renderGrid(enemyGrid, explodingCells, {}, handleShoot, undefined, undefined, isMyTurn)}
+        </div>
+
       </div>
     </div>
   );

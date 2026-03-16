@@ -8,6 +8,7 @@ interface CellProps {
   isExploding?: boolean;
   shipOrientation?: 'h' | 'v';
   previewState?: 'valid' | 'invalid';
+  shootable?: boolean; // puste pole planszy wroga, można kliknąć
 }
 
 function getBg(state: CellState, shipOrientation?: 'h' | 'v'): string {
@@ -33,7 +34,7 @@ const SYMBOL_CLASS: Record<CellState, string> = {
   miss:  'text-base font-bold',
 };
 
-export default function Cell({ state, onClick, onMouseEnter, onMouseLeave, isExploding, shipOrientation, previewState }: CellProps) {
+export default function Cell({ state, onClick, onMouseEnter, onMouseLeave, isExploding, shipOrientation, previewState, shootable }: CellProps) {
   return (
     <button
       onClick={onClick}
@@ -45,9 +46,10 @@ export default function Cell({ state, onClick, onMouseEnter, onMouseLeave, isExp
         border border-blue-950
         flex items-center justify-center
         select-none overflow-hidden
-        transition-[filter] duration-100
+        transition-[filter,background-color] duration-100
         ${getBg(state, shipOrientation)}
         ${state === 'miss' ? 'text-gray-500' : 'text-white'}
+        ${shootable ? 'hover:brightness-150 cursor-crosshair' : ''}
       `}
     >
       <span className={`${SYMBOL_CLASS[state]} ${state === 'hit' && isExploding ? 'cell-exploding' : ''}`}>
