@@ -81,7 +81,11 @@ export default function Lobby({ onEnterGame }: Props) {
       setWaiting(true);
       subscribeToGame(gameId); // auto-przekierowanie gdy player2 dołączy
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Nieznany błąd');
+      setError(
+        e instanceof Error ? e.message
+        : (typeof e === 'object' && e !== null && 'message' in e) ? String((e as { message: unknown }).message)
+        : JSON.stringify(e)
+      );
     } finally {
       setLoading(false);
     }
@@ -114,7 +118,11 @@ export default function Lobby({ onEnterGame }: Props) {
       if (joinError) throw joinError;
       onEnterGame(game.id); // player2 przechodzi od razu
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Nieznany błąd');
+      setError(
+        e instanceof Error ? e.message
+        : (typeof e === 'object' && e !== null && 'message' in e) ? String((e as { message: unknown }).message)
+        : JSON.stringify(e)
+      );
     } finally {
       setLoading(false);
     }
